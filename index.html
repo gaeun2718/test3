@@ -1,249 +1,161 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>월별 전력 수급현황 대시보드</title>
-    <!-- 오픈소스 시각화 라이브러리 로드 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <style>
-        body {
-            font-family: 'Malgun Gothic', sans-serif;
-            background-color: #f1f5f9;
-            color: #334155;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 25px;
-        }
-        .control-panel {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: center;
-        }
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        select {
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #cbd5e1;
-            font-size: 14px;
-        }
-        .checkbox-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 14px;
-        }
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        }
-        .chart-container {
-            position: relative;
-            height: 450px;
-            width: 100%;
-        }
-        #loading {
-            text-align: center;
-            font-weight: bold;
-            padding: 40px;
-            color: #2563eb;
-        }
-        #error-msg {
-            color: #dc2626;
-            background: #fef2f2;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>월별 전력 수급 현황</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- CSV 파서 -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    select {
+      padding: 8px;
+      margin: 15px 0;
+      font-size: 16px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 500px !important;
+    }
+  </style>
 </head>
+
 <body>
-
 <div class="container">
-    <header>
-        <h2>⚡ 월별 전력 수급현황 비교</h2>
-    </header>
+  <h1>📊 월별 전력 수급 현황</h1>
 
-    <div id="error-msg"></div>
-    <div id="loading">CSV 데이터를 불러오는 중입니다...</div>
+  <label>연도 선택: </label>
+  <select id="yearSelect"></select>
 
-    <!-- 컨트롤 패널 -->
-    <div class="control-panel" id="controls" style="display: none;">
-        <div class="control-group">
-            <label style="font-weight: bold;">그래프 종류</label>
-            <select id="chartType">
-                <option value="line">선 그래프</option>
-                <option value="bar">막대 그래프</option>
-            </select>
-        </div>
-        <div class="control-group">
-            <label style="font-weight: bold;">비교 연도 선택</label>
-            <div class="checkbox-container" id="yearSelectors"></div>
-        </div>
-    </div>
-
-    <!-- 차트 -->
-    <div class="card">
-        <div class="chart-container">
-            <canvas id="powerChart"></canvas>
-        </div>
-    </div>
+  <canvas id="chart"></canvas>
 </div>
 
 <script>
-    // 제공된 파일명 지정
-    const FILE_NAME = 'HOME_전력수급_최대_최소전력월별평균.csv';
-    let rawData = [];
-    let powerChart = null;
-    const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-    
-    // 그래프 색상 배열
-    const colors = [
-        { border: '#2563eb', background: 'rgba(37, 99, 235, 0.2)' },
-        { border: '#dc2626', background: 'rgba(220, 38, 38, 0.2)' },
-        { border: '#16a34a', background: 'rgba(22, 163, 74, 0.2)' },
-        { border: '#ea580c', background: 'rgba(234, 88, 12, 0.2)' },
-        { border: '#9333ea', background: 'rgba(147, 51, 234, 0.2)' }
-    ];
+const csvFile = "HOME_전력수급_최대_최소전력월별평균(1).csv";
 
-    // 페이지 로드 시 CSV 호출
-    window.addEventListener('DOMContentLoaded', () => {
-        fetch(FILE_NAME)
-            .then(res => {
-                if (!res.ok) throw new Error('CSV 파일을 찾을 수 없습니다.');
-                return res.blob();
-            })
-            .then(blob => {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    // 한글 인코딩(EUC-KR) 처리하여 파싱
-                    Papa.parse(e.target.result, {
-                        header: true,
-                        skipEmptyLines: true,
-                        dynamicTyping: true,
-                        complete: function(results) {
-                            rawData = results.data;
-                            initDashboard();
-                        }
-                    });
-                };
-                reader.readAsText(blob, 'EUC-KR');
-            })
-            .catch(err => {
-                const errDiv = document.getElementById('error-msg');
-                errDiv.textContent = err.message + ' 파일명과 위치를 확인해주세요.';
-                errDiv.style.display = 'block';
-                document.getElementById('loading').style.display = 'none';
-            });
+let chart;
+let rawData = [];
+
+// CSV 불러오기
+Papa.parse(csvFile, {
+  download: true,
+  header: true,
+  skipEmptyLines: true, // ⭐ 빈 줄 제거
+  complete: function(results) {
+
+    // ⭐ 컬럼 이름 공백 제거 + BOM 제거
+    rawData = results.data.map(row => {
+      const newRow = {};
+      Object.keys(row).forEach(key => {
+        const cleanKey = key.replace(/\uFEFF/g, "").trim();
+        newRow[cleanKey] = row[key];
+      });
+      return newRow;
     });
 
-    // 화면 UI 초기화
-    function initDashboard() {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('controls').style.display = 'flex';
+    console.log("로드된 데이터:", rawData);
+    init();
+  }
+});
 
-        // 연도 목록 가져오기
-        const years = rawData.map(row => row['연도']).filter(y => y != null);
-        const container = document.getElementById('yearSelectors');
-        
-        // 연도 체크박스 생성 (최신 3개 연도 기본 체크)
-        years.forEach((year, idx) => {
-            const label = document.createElement('label');
-            label.className = 'checkbox-item';
-            
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.value = year;
-            if (idx < 3) checkbox.checked = true;
-            
-            checkbox.addEventListener('change', updateChart);
-            
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(year + '년'));
-            container.appendChild(label);
-        });
+// 초기화
+function init() {
+  const yearSelect = document.getElementById("yearSelect");
 
-        document.getElementById('chartType').addEventListener('change', updateChart);
-        updateChart();
-    }
+  // 유효한 데이터만
+  const validData = rawData.filter(d => d["연도"]);
 
-    // 차트 생성 및 업데이트
-    function updateChart() {
-        const checkedBoxes = document.querySelectorAll('#yearSelectors input:checked');
-        const selectedYears = Array.from(checkedBoxes).map(cb => Number(cb.value));
-        const chartType = document.getElementById('chartType').value;
+  // 연도 옵션 생성
+  validData.forEach(row => {
+    const option = document.createElement("option");
+    option.value = row["연도"];
+    option.textContent = row["연도"];
+    yearSelect.appendChild(option);
+  });
 
-        const datasets = selectedYears.map((year, idx) => {
-            const yearData = rawData.find(row => row['연도'] === year);
-            
-            // 데이터가 없거나 0인 미래 수치는 공백(null) 처리하여 그래프 왜곡 방지
-            const dataValues = months.map(m => {
-                const val = yearData ? yearData[m] : 0;
-                return val === 0 ? null : val;
-            });
+  drawChart(validData[0]);
 
-            const color = colors[idx % colors.length];
+  yearSelect.addEventListener("change", () => {
+    const selected = validData.find(d => d["연도"] == yearSelect.value);
+    drawChart(selected);
+  });
+}
 
-            return {
-                label: year + '년',
-                data: dataValues,
-                borderColor: color.border,
-                backgroundColor: chartType === 'bar' ? color.border : color.background,
-                borderWidth: 2,
-                tension: 0.1,
-                spanGaps: true
-            };
-        });
+// 숫자 변환 (콤마 제거)
+function parseNumber(v) {
+  if (!v) return null;
+  return Number(v.toString().replace(/,/g, ""));
+}
 
-        if (powerChart) {
-            powerChart.destroy();
+// 그래프 그리기
+function drawChart(data) {
+  if (!data) return;
+
+  const months = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+
+  const values = months.map(m => parseNumber(data[m]));
+
+  const ctx = document.getElementById("chart").getContext("2d");
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: months,
+      datasets: [{
+        label: data["연도"] + "년 전력",
+        data: values,
+        spanGaps: true, // ⭐ 빈 값 끊김 처리
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: true
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y?.toLocaleString() + " MW"
+          }
         }
-
-        const ctx = document.getElementById('powerChart').getContext('2d');
-        powerChart = new Chart(ctx, {
-            type: chartType,
-            data: {
-                labels: months,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        title: { display: true, text: '전력량' },
-                        ticks: { callback: val => val.toLocaleString() }
-                    }
-                }
-            }
-        });
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: v => v.toLocaleString()
+          }
+        }
+      }
     }
+  });
+}
 </script>
 
 </body>
