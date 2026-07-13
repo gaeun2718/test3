@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>월별 전력 수급 시각화</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 40px;
+    }
+    canvas {
+      max-width: 800px;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+
+<h2>월별 전력 수급 현황</h2>
+<canvas id="powerChart"></canvas>
+
+<script>
+async function loadCSV() {
+  const response = await fetch("HOME_전력수급_최대_최소전력월별평균.csv");
+  const data = await response.text();
+  return data;
+}
+
+function parseCSV(csv) {
+  const rows = csv.trim().split("\n");
+  const headers = rows[0].split(",");
+
+  const month = [];
+  const maxPower = [];
+  const minPower = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i].split(",");
+
+    month.push(cols[0]);         // 월
+    maxPower.push(Number(cols[1])); // 최대전력
+    minPower.push(Number(cols[2])); // 최소전력
+  }
+
+  return { month, maxPower, minPower };
+}
+
+function drawChart(data) {
+  const ctx = document.getElementById("powerChart").getContext("2d");
+
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: data.month,
+      datasets: [
+        {
+          label: "최대 전력",
+          data: data.maxPower,
+          borderWidth: 2,
+          fill: false
+        },
+        {
+          label: "최소 전력",
+          data: data.minPower,
+          borderWidth: 2,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: "월별 최대/최소 전력 비교"
+        }
+      }
+    }
+  });
+}
+
+async function init() {
+  const csv = await loadCSV();
+  const parsed = parseCSV(csv);
+  drawChart(parsed);
+}
+
+init();
+</script>
+
+</body>
+</html>
